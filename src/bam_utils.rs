@@ -103,7 +103,8 @@ fn get_cigar_from_raw_word(raw: u32) -> Cigar {
 pub fn get_record_cigar(record: &bam::Record) -> Cow<'_, CigarStringView> {
     match record.cigar_cached() {
         Some(cigar)
-            if cigar.len() == record.cigar_len()
+            if cigar.pos() == record.pos()
+                && cigar.len() == record.cigar_len()
                 && cigar
                     .iter()
                     .zip(record.raw_cigar())
@@ -479,6 +480,24 @@ pub fn get_alignment_ref_segments(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_get_record_cigar_tracks_position_with_identical_cigar() {
+        let mut record = bam::Record::new();
+        record.set(
+            b"same_cigar_different_position",
+            Some(&CigarString(vec![Cigar::Match(20)])),
+            &[b'A'; 20],
+            &[30u8; 20],
+        );
+        record.set_pos(100);
+        record.cache_cigar();
+        record.set_pos(110);
+        assert_eq!(record.cigar_cached().unwrap().pos(), 100);
+        let cigar = get_record_cigar(&record);
+        assert_eq!(cigar.pos(), 110);
+        assert_eq!(cigar.end_pos(), 130);
+    }
 
     /// A cigar cached for one record must never be used for the next record read into the buffer
     #[test]

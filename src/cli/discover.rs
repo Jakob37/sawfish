@@ -241,7 +241,12 @@ pub fn validate_and_fix_discovery_settings(
     let mut settings = settings;
     if !settings.disable_path_canonicalization {
         settings.ref_filename = canonicalize_string_path(&settings.ref_filename);
-        settings.bam_filename = canonicalize_string_path(&settings.bam_filename);
+        // Keep the staged BAM path paired with its freshly generated index.
+        settings.bam_filename = std::path::absolute(&settings.bam_filename)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
 
         settings.cnv_excluded_regions_filename = settings
             .cnv_excluded_regions_filename
