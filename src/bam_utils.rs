@@ -95,7 +95,7 @@ fn get_cigar_from_raw_word(raw: u32) -> Cigar {
 /// than once per record should call `cache_cigar` once and then use this function.
 ///
 /// The cache is not cleared when a new alignment is read into the record, so a cached CIGAR is
-/// only used if it is identical to the record's current CIGAR (compared with the raw CIGAR, which
+/// only used if its position and operations match the record (compared with the raw CIGAR, which
 /// is cheap next to decoding it). Otherwise the CIGAR is decoded from the record. This makes the
 /// function correct for any cache state, but `Record::cigar` is not: code that can run on a record
 /// with a stale cache has to call this function instead.

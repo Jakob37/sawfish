@@ -312,7 +312,7 @@ pub fn validate_and_fix_joint_call_settings(
         }
     }
 
-    // Canonicalize sample paths
+    // Resolve sample paths while preserving BAM symlinks and their adjacent indexes
     for input_sample_data in all_input_sample_data.iter_mut() {
         input_sample_data.discover_dir =
             input_sample_data.discover_dir.canonicalize_utf8().unwrap();

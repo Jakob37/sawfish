@@ -816,8 +816,10 @@ discover step output directory here:
 
     ${DISCOVER_STEP_OUTPUT_DIR}/discover.settings.json
 
-These input file paths are normally canonicalized, so that relative paths can be reliably reused after any change to the
-working directory. In some cases it may be more convenient to store relative file paths. To do so the `discover` step
+These input file paths are normally made absolute, so that relative paths can be reliably reused after any change to the
+working directory. BAM symlinks are preserved so the index is looked up beside the supplied BAM path, including when a
+BAM path is provided through `joint-call --sample-csv`. Other input paths are canonicalized. In some cases it may be
+more convenient to store relative file paths. To do so the `discover` step
 option `--disable-path-canonicalization` can be used to store all input paths as-is. This may be useful if e.g., the
 `discover` and `joint-call` steps are being run in different directory structures.
 

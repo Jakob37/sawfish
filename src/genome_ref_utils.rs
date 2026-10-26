@@ -656,6 +656,80 @@ pub fn get_ref_segment_seq(reference: &GenomeRef, genome_segment: &GenomeSegment
 mod tests {
     use super::*;
 
+    /// Reusing an identical M CIGAR at a later position must fetch the full reference span.
+    /// The second read previously requested 4176 reference bases for a 4307M alignment.
+    #[test]
+    fn test_gap_compressed_identity_with_stale_cigar_position() {
+        use rust_htslib::bam::{self, Read, record::Cigar, record::CigarString};
+
+        let dir =
+            std::env::temp_dir().join(format!("sawfish_gci_stale_position_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let reference_seq = b"ACGT".repeat(2500);
+        let fasta = dir.join("ref.fa");
+        let fasta_filename = fasta.to_str().unwrap();
+        let mut fasta_bytes = b">chr1\n".to_vec();
+        fasta_bytes.extend_from_slice(&reference_seq);
+        fasta_bytes.push(b'\n');
+        std::fs::write(&fasta, fasta_bytes).unwrap();
+        std::fs::write(
+            format!("{fasta_filename}.fai"),
+            "chr1\t10000\t6\t10000\t10001\n",
+        )
+        .unwrap();
+        let mut chrom_list = ChromList::default();
+        chrom_list.add_chrom("chr1", reference_seq.len() as u64);
+        let references = [
+            GenomeRef::from_chrom_seqs(vec![reference_seq.clone()]),
+            get_indexed_genome_ref(
+                fasta_filename,
+                &chrom_list,
+                read_fasta_index(&format!("{fasta_filename}.fai")).unwrap(),
+            ),
+        ];
+
+        let bam_path = dir.join("reads.bam");
+        let positions = [100, 231];
+        {
+            let mut header = bam::Header::new();
+            header.push_record(
+                bam::header::HeaderRecord::new(b"SQ")
+                    .push_tag(b"SN", "chr1")
+                    .push_tag(b"LN", reference_seq.len()),
+            );
+            let mut writer = bam::Writer::from_path(&bam_path, &header, bam::Format::Bam).unwrap();
+            for pos in positions {
+                let mut record = bam::Record::new();
+                let start = pos as usize;
+                record.set(
+                    b"repeated_cigar",
+                    Some(&CigarString(vec![Cigar::Match(4307)])),
+                    &reference_seq[start..start + 4307],
+                    &[30; 4307],
+                );
+                record.set_tid(0);
+                record.set_pos(pos);
+                writer.write(&record).unwrap();
+            }
+        }
+        for reference in references {
+            let mut reader = bam::Reader::from_path(&bam_path).unwrap();
+            let mut record = bam::Record::new();
+            for (i, pos) in positions.into_iter().enumerate() {
+                reader.read(&mut record).unwrap().unwrap();
+                assert_eq!(record.pos(), pos);
+                if i > 0 {
+                    assert_eq!(record.cigar_cached().unwrap().pos(), positions[i - 1]);
+                }
+                assert_eq!(get_gap_compressed_identity(&record, &reference, 0), 1.0);
+                // Match the scanner: score first, then cache for downstream consumers.
+                record.cache_cigar();
+            }
+            assert!(reader.read(&mut record).is_none());
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn test_parse_fasta_index() {
         let good = "chr1\t100\t6\t50\t51\nchr2\t20\t120\t20\t21\n";
