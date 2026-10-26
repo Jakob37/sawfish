@@ -95,7 +95,7 @@ fn get_cigar_from_raw_word(raw: u32) -> Cigar {
 /// than once per record should call `cache_cigar` once and then use this function.
 ///
 /// The cache is not cleared when a new alignment is read into the record, so a cached CIGAR is
-/// only used if it is identical to the record's current CIGAR (compared with the raw CIGAR, which
+/// only used if its position and operations match the record (compared with the raw CIGAR, which
 /// is cheap next to decoding it). Otherwise the CIGAR is decoded from the record. This makes the
 /// function correct for any cache state, but `Record::cigar` is not: code that can run on a record
 /// with a stale cache has to call this function instead.
@@ -103,7 +103,8 @@ fn get_cigar_from_raw_word(raw: u32) -> Cigar {
 pub fn get_record_cigar(record: &bam::Record) -> Cow<'_, CigarStringView> {
     match record.cigar_cached() {
         Some(cigar)
-            if cigar.len() == record.cigar_len()
+            if cigar.pos() == record.pos()
+                && cigar.len() == record.cigar_len()
                 && cigar
                     .iter()
                     .zip(record.raw_cigar())
@@ -479,6 +480,24 @@ pub fn get_alignment_ref_segments(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_get_record_cigar_tracks_position_with_identical_cigar() {
+        let mut record = bam::Record::new();
+        record.set(
+            b"same_cigar_different_position",
+            Some(&CigarString(vec![Cigar::Match(20)])),
+            &[b'A'; 20],
+            &[30u8; 20],
+        );
+        record.set_pos(100);
+        record.cache_cigar();
+        record.set_pos(110);
+        assert_eq!(record.cigar_cached().unwrap().pos(), 100);
+        let cigar = get_record_cigar(&record);
+        assert_eq!(cigar.pos(), 110);
+        assert_eq!(cigar.end_pos(), 130);
+    }
 
     /// A cigar cached for one record must never be used for the next record read into the buffer
     #[test]

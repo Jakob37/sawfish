@@ -147,8 +147,9 @@ pub struct DiscoverSettings {
 
     /// Don't canonicalize input file paths
     ///
-    /// By default, all file paths input to the discover step are canonicalized and stored in the discover output
-    /// directory for use in follow-on joint-call steps. This flag disables all canonicalization, which allows all paths
+    /// By default, input file paths are made absolute and stored in the discover output directory for use in follow-on
+    /// joint-call steps. BAM symlinks are preserved so index lookup uses the supplied path; other input paths are
+    /// canonicalized. This flag disables path normalization, which allows all paths
     /// to be stored as-is, including as relative paths. This may be useful for situations where the sample discover and
     /// joint-call steps are run in different directory structures.
     ///
@@ -241,7 +242,12 @@ pub fn validate_and_fix_discovery_settings(
     let mut settings = settings;
     if !settings.disable_path_canonicalization {
         settings.ref_filename = canonicalize_string_path(&settings.ref_filename);
-        settings.bam_filename = canonicalize_string_path(&settings.bam_filename);
+        // Keep the staged BAM path paired with its freshly generated index.
+        settings.bam_filename = std::path::absolute(&settings.bam_filename)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
 
         settings.cnv_excluded_regions_filename = settings
             .cnv_excluded_regions_filename

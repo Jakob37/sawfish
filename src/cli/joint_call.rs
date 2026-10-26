@@ -11,7 +11,6 @@ use unwrap::unwrap;
 use super::utils::check_optional_filename;
 use crate::cli::utils::check_required_filename;
 use crate::run_stats::read_discover_run_stats;
-use crate::utils::canonicalize_string_path;
 
 use super::defaults::{MIN_GAP_COMPRESSED_IDENTITY, MIN_SV_MAPQ};
 use super::discover::read_discover_settings;
@@ -313,14 +312,15 @@ pub fn validate_and_fix_joint_call_settings(
         }
     }
 
-    // Canonicalize sample paths
+    // Resolve sample paths while preserving BAM symlinks and their adjacent indexes
     for input_sample_data in all_input_sample_data.iter_mut() {
         input_sample_data.discover_dir =
             input_sample_data.discover_dir.canonicalize_utf8().unwrap();
         input_sample_data.bam_filename = input_sample_data
             .bam_filename
             .as_ref()
-            .map(|x| canonicalize_string_path(x));
+            // Resolving BAM symlinks would select the source BAM's index instead.
+            .map(|x| std::path::absolute(x).unwrap().to_str().unwrap().to_owned());
     }
 
     // Check for repeated entries
